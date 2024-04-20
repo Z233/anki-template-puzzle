@@ -6,31 +6,54 @@
   import { quintOut } from 'svelte/easing';
   import clsx from 'clsx';
   import { createUiStore } from './store/ui';
+  import { PersistenceKey } from './types';
+  import { onMount } from 'svelte';
 
-  const sentence = window._card.Sentence;
+  const IS_BACK_SIDE = Boolean(document.getElementById('BACK_SIDE'));
 
-  const words = [...sentence.matchAll(/\w+/g)].map((match) => match[0].toLocaleLowerCase());
+  const persistenceData = IS_BACK_SIDE ? window.Persistence.getItem() : {};
+  window.Persistence.clear();
+
+  const info = window._card.Info;
+  const sentence = new DOMParser().parseFromString(window._card.Sentence, 'text/html').documentElement.textContent!;
+
+  const words = [...sentence.matchAll(/\w+/g)].map((match) => match[0]);
   const shuffledWords = [...words].sort(() => Math.random() - 0.5);
 
   const wordStore = createWordStore(
-    shuffledWords.map((w) => ({
-      checked: false,
-      word: w,
-    }))
+    persistenceData && persistenceData?.[PersistenceKey.Words]
+      ? JSON.parse(persistenceData[PersistenceKey.Words])
+      : shuffledWords.map((w) => ({
+          checked: false,
+          word: w,
+        }))
   );
+
+  const uiStore = createUiStore(
+    persistenceData && persistenceData?.[PersistenceKey.UI]
+      ? JSON.parse(persistenceData[PersistenceKey.UI])
+      : { showAnswer: false }
+  );
+
+  $: {
+    if (!IS_BACK_SIDE) {
+      window.Persistence.setItem(undefined, {
+        [PersistenceKey.Words]: JSON.stringify($wordStore),
+        [PersistenceKey.UI]: JSON.stringify($uiStore),
+      });
+    }
+  }
+
   $: isAllChecked = $wordStore.every((w) => w.checked);
   $: checkedWords = $wordStore.filter((w) => w.checked).map((w) => w.word);
 
-  const uiStore = createUiStore();
   $: isShowAnswer = $uiStore.showAnswer;
 
-  let listHeight = 0;
-  // @ts-expect-error
-  $: maxListHeight = Math.max(maxListHeight ?? 0, listHeight);
-
   $: {
-    if (isShowAnswer && !isAllChecked) {
-      uiStore.toggleAnswer(false);
+    if (!IS_BACK_SIDE && isShowAnswer && !isAllChecked) {
+      requestAnimationFrame(() => {
+        uiStore.toggleAnswer(false);
+      });
     }
   }
 
@@ -40,9 +63,9 @@
     isCorrect: boolean;
   }[] = [];
 
-  $: isAllCorrect = checkedWords.length === words.length;
+  $: isAllCorrect = inputResult.length === words.length && inputResult.every((r) => r.isCorrect);
 
-  function handleCheck() {
+  function checkInputs() {
     checkedWords.forEach((word, index) => {
       const { resultHTML, correctHTML, isCorrect: isWordCorrect } = spellCheck(word, words[index]);
 
@@ -54,14 +77,22 @@
           isCorrect: isWordCorrect,
         },
       ];
-
-      if (!isWordCorrect) {
-        isAllCorrect = false;
-      }
     });
+  }
 
+  function handleCheck() {
+    checkInputs();
     uiStore.toggleAnswer(true);
   }
+
+  onMount(() => {
+    if (IS_BACK_SIDE) {
+      checkInputs();
+      if (!isShowAnswer) {
+        uiStore.toggleAnswer(true);
+      }
+    }
+  });
 
   function handleTryAgain() {
     wordStore.reset();
@@ -70,12 +101,19 @@
   }
 </script>
 
-<main style="--list-height: {maxListHeight}px" class="p-4 mx-auto max-w-xl h-full flex flex-col">
-  <div class="flex-1 flex flex-col justify-center gap-6">
-    <WordList bind:listHeight checked={true} store={wordStore} />
-    <div class="w-[200%] h-[1px] bg-neutral-200 scale-50 origin-left" />
+<main class="h-full w-full flex flex-col">
+  {#if info}
+    <div class="h-48 border-b grid place-content-center bg-neutral-50">
+      <p class="text-lg">
+        {info}
+      </p>
+    </div>
+  {/if}
+  <div class="p-4 w-full mx-auto max-w-xl flex-1 flex flex-col justify-center gap-6">
+    <WordList checked={true} store={wordStore} />
+    <div class="w-[200%] h-[1px] bg-neutral-200 scale-50 origin-left transition" />
     <div>
-      <WordList bind:listHeight checked={false} store={wordStore} />
+      <WordList checked={false} store={wordStore} />
       <div class="relative">
         {#if isShowAnswer}
           <div
@@ -83,6 +121,7 @@
             class={clsx('px-4 pb-[4.5rem] pt-4 flex flex-col gap-2 rounded', {
               'bg-red-200 text-red-600': !isAllCorrect,
               'bg-green-200 text-green-600': isAllCorrect,
+              '!pb-4 mt-6': isShowAnswer && !isAllChecked,
             })}
           >
             <h3 class="font-bold flex gap-2 items-center">
@@ -99,7 +138,7 @@
               {#if isAllCorrect}
                 {sentence}
               {:else}
-                {@html inputResult.map((c) => c.correction).join(' ')}
+                {@html inputResult.length ? inputResult.map((c) => c.correction).join(' ') : `Answer: ${sentence}`}
               {/if}
             </p>
           </div>
@@ -113,7 +152,9 @@
           >
             <button
               class={clsx(
-                '!text-base w-full bg-white group relative inline-flex h-10 items-center justify-center overflow-hidden rounded-md border px-6 font-medium transition-all shadow-[0px_4px_1px] active:translate-y-[2px] active:shadow-none',
+                `!text-base w-full bg-white group relative inline-flex h-10 items-center justify-center 
+                overflow-hidden rounded-md border px-6 font-medium transition-all shadow-[0px_4px_1px] 
+                active:translate-y-[2px] active:shadow-none`,
                 {
                   'shadow-neutral-600  text-neutral-600  border-neutrag-200': !isShowAnswer,
                   'border-green-200 text-green-600 shadow-green-600': isShowAnswer && isAllCorrect,

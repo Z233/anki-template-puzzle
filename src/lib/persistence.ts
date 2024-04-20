@@ -106,7 +106,7 @@ function initializePersistence() {
       persistence = new PersistenceWindowKey<any>('qt'); // linux, mac (2.1)
     }
   }
-
+  
   window.Persistence = persistence;
 }
 

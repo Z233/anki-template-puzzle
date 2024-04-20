@@ -1,32 +1,18 @@
-import { PersistenceKey, type CheckableWord, type Word } from 'src/types';
+import { type CheckableWord, type Word } from 'src/types';
 import { writable } from 'svelte/store';
 
-export function createWordStore(initial: Word[]) {
+export function createWordStore(initialWords: Word[]) {
   let uid = 1;
 
-  let initialWords: CheckableWord[] = [];
-  const persistenceData = window.Persistence.getItem();
-
-  if (persistenceData && persistenceData[PersistenceKey.Words]) {
-    initialWords = JSON.parse(persistenceData[PersistenceKey.Words]);
-  }
-
-  if (initialWords.length === 0) {
-    initialWords = initial.map(({ checked, word }) => {
-      return {
-        id: uid++,
-        checked,
-        word,
-      };
-    });
-  }
-
-  const { subscribe, update } = writable(initialWords);
-
-  subscribe((value) => {
-    const data = window.Persistence.getItem();
-    window.Persistence.setItem(undefined, { ...data, [PersistenceKey.Words]: JSON.stringify(value) });
+  const words = initialWords.map(({ checked, word }) => {
+    return {
+      id: uid++,
+      checked,
+      word,
+    };
   });
+
+  const { subscribe, update } = writable(words);
 
   return {
     subscribe,

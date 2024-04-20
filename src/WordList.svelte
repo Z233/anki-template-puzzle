@@ -3,11 +3,10 @@
   import { receive, send } from './lib/transition';
   import type { WordStore } from './store/words';
   import type { CheckableWord } from './types';
+  import clsx from 'clsx';
 
   export let store: WordStore;
   export let checked: boolean;
-
-  export let listHeight: number = 0;
 
   $: items = $store.filter((word) => word.checked === checked);
 
@@ -16,15 +15,19 @@
   }
 </script>
 
-<ul bind:clientHeight={listHeight} class="flex gap-2 flex-wrap justify-center items-start gap-y-3">
+<ul class="flex gap-2 flex-wrap justify-center items-start gap-y-3">
   {#each items as word (word.id)}
     <button
       in:receive={{ key: word.id }}
       out:send={{ key: word.id }}
       animate:flip={{ duration: 200 }}
       on:click|stopPropagation|preventDefault={() => handleCheck(word, !checked)}
+      class={clsx('px-3 py-1 rounded relative transition active:bg-opacity-85', {
+        'bg-sky-100 text-sky-600': checked,
+        'bg-orange-100 text-orange-600': !checked,
+      })}
     >
-      <label class="bg-orange-100 text-orange-600 px-3 py-1 rounded relative">
+      <label>
         <span>{word.word}</span>
         <input class="invisible absolute inset-0" type="checkbox" checked={word.checked} />
       </label>
